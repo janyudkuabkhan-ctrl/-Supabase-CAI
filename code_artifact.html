@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คอร์สแวร์: เทคโนโลยีความจริงเสริมเพื่อการศึกษา</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Model Viewer CDN for WebAR -->
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    
+    <style>
+        :root {
+            --primary: #1e3a8a; /* Navy */
+            --secondary: #475569; /* Slate */
+            --bg-main: #f8fafc;
+            --bg-card: #ffffff;
+            --text-main: #0f172a;
+            --text-light: #f8fafc;
+            --success: #059669;
+            --danger: #dc2626;
+            --border: #e2e8f0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Sarabun', sans-serif; }
+        body { background-color: var(--bg-main); color: var(--text-main); line-height: 1.6; }
+        
+        .container { max-width: 1024px; margin: 0 auto; padding: 20px; }
+        header { background-color: var(--primary); color: var(--text-light); padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card-header { background-color: var(--primary); color: white; padding: 10px 16px; border-radius: 6px 6px 0 0; margin: -24px -24px 20px -24px; font-weight: 600; }
+        
+        h1 { font-size: 1.5rem; } h2 { font-size: 1.25rem; margin-bottom: 15px; color: var(--primary); }
+        p { margin-bottom: 15px; }
+        
+        button { background-color: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: 0.2s; }
+        button:hover { opacity: 0.9; }
+        button:disabled { background-color: var(--secondary); cursor: not-allowed; }
+        button.secondary { background-color: var(--secondary); }
+        
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 15px; font-size: 1rem; }
+        
+        .hidden { display: none !important; }
+        .alert { padding: 10px; border-radius: 6px; margin-bottom: 15px; font-weight: 500; }
+        .alert-error { background-color: #fee2e2; color: var(--danger); border: 1px solid #f87171; }
+        .alert-success { background-color: #d1fae5; color: var(--success); border: 1px solid #34d399; }
+        
+        .nav-menu { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .nav-menu button { flex: 1; min-width: 120px; }
+        
+        .question-box { background: #f1f5f9; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid var(--primary); }
+        .option-label { display: block; padding: 10px; background: white; border: 1px solid var(--border); margin-bottom: 8px; border-radius: 4px; cursor: pointer; }
+        .option-label:hover { background: #e2e8f0; }
+        
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
+        th { background-color: var(--primary); color: white; }
+        
+        .profile-pic { width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 2px solid var(--primary); }
+        
+        model-viewer { width: 100%; height: 300px; background-color: #e2e8f0; border-radius: 8px; }
+        
+        @media (max-width: 600px) {
+            header { flex-direction: column; text-align: center; gap: 10px; }
+            table { display: block; overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Config Notice -->
+    <div id="configNotice" class="card alert-error hidden">
+        <h2>⚠️ ระบบยังไม่พร้อมใช้งาน</h2>
+        <p>กรุณาระบุ <code>SUPABASE_URL</code> และ <code>SUPABASE_ANON_KEY</code> ในบรรทัดที่กำหนดของไฟล์ HTML ก่อนใช้งาน</p>
+    </div>
+
+    <!-- Header -->
+    <header id="mainHeader" class="hidden">
+        <div>
+            <h1>เทคโนโลยีความจริงเสริมเพื่อการศึกษา</h1>
+            <p style="margin:0; font-size:0.9rem;" id="userDisplay"></p>
+        </div>
+        <div>
+            <button id="btnLogout" class="secondary">ออกจากระบบ</button>
+        </div>
+    </header>
+
+    <div id="appError" class="alert alert-error hidden"></div>
+    <div id="appSuccess" class="alert alert-success hidden"></div>
+
+    <!-- Views -->
+    <!-- 1. Auth View -->
+    <div id="viewAuth" class="card hidden">
+        <div class="card-header">เข้าสู่ระบบ / ลงทะเบียน</div>
+        <form id="authForm" onsubmit="event.preventDefault(); handleAuth();">
+            <label>อีเมล (นักศึกษาใช้รหัส 11 หลัก @dummy-edu.ac.th)</label>
+            <input type="email" id="authEmail" required placeholder="ex. 11111111111@dummy-edu.ac.th">
+            <label>รหัสผ่าน</label>
+            <input type="password" id="authPassword" required minlength="6">
+            <div style="display:flex; gap:10px;">
+                <button type="submit" id="btnLogin">เข้าสู่ระบบ</button>
+                <button type="button" class="secondary" onclick="handleRegister()">สมัครสมาชิก</button>
+            </div>
+            <p style="margin-top:15px; font-size:0.85rem; color:var(--secondary);">* นักศึกษาต้องใช้รหัสที่มีในฐานข้อมูลเท่านั้น<br>* ปิด Confirm Email ใน Supabase ก่อนทดสอบ</p>
+        </form>
+    </div>
+
+    <!-- 2. Student Dashboard -->
+    <div id="viewStudent" class="hidden">
+        <div class="nav-menu">
+            <button onclick="router('pretest')" id="btnPretest">ทดสอบก่อนเรียน</button>
+            <button onclick="router('lessons')" id="btnLessons">บทเรียน</button>
+            <button onclick="router('posttest')" id="btnPosttest" disabled>ทดสอบหลังเรียน</button>
+            <button onclick="router('summary')" id="btnSummary">สรุปผล</button>
+            <button onclick="router('materials')">สื่อเพิ่มเติม</button>
+            <button onclick="router('profile')">โปรไฟล์ & ส่งงาน</button>
+        </div>
+        <div id="studentContent"></div>
+    </div>
+
+    <!-- 3. Teacher Dashboard -->
+    <div id="viewTeacher" class="hidden">
+        <div class="nav-menu">
+            <button onclick="loadTeacherDashboard()">สรุปผลผู้เรียน</button>
+            <button onclick="loadSubmissions()">ตรวจงาน</button>
+            <button onclick="loadTeacherMaterials()">จัดการสื่อ</button>
+        </div>
+        <div id="teacherContent"></div>
+    </div>
+
+</div>
+
+<script>
+    // ==========================================
+    // 1. CONFIGURATION (EDIT HERE)
+    // ==========================================
+    const SUPABASE_URL = ''; // <-- ใส่ URL ที่นี่
+    const SUPABASE_ANON_KEY = ''; // <-- ใส่ Anon Key ที่นี่
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        document.getElementById('configNotice').classList.remove('hidden');
+    }
+
+    const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ==========================================
+    // 2. STATE & DATA
+    // ==========================================
+    let currentUser = null;
+    let studentData = null;
+    let isTeacher = false;
+    let userProgress = [];
+    let preAttempt = null;
+    let postAttempt = null;
+
+    // --- Content Data ---
+    const courseUnits = [
+        {
+            title: "หน่วยที่ 1: พื้นฐานความจริงเสริม",
+            obj: "ผู้เรียนสามารถอธิบายความหมายและแยกแยะความแตกต่างระหว่าง AR, VR และ MR ได้",
+            content: `<b>ความจริงเสริม (Augmented Reality: AR)</b> ตามนิยามของ Azuma (1997) ประกอบด้วยลักษณะ 3 ประการ คือ 1) ผสมผสานโลกจริงกับโลกเสมือน 2) โต้ตอบได้แบบเรียลไทม์ และ 3) ลงทะเบียนตำแหน่งวัตถุในรูปแบบสามมิติ<br><br>
+            แนวคิด Reality-Virtuality Continuum ของ Milgram & Kishino (1994) อธิบายว่า AR เป็นส่วนหนึ่งของความจริงผสม (Mixed Reality) โดย AR จะอิงโลกจริงเป็นหลัก ผิดกับ Virtual Reality (VR) ที่ตัดขาดจากโลกจริงอย่างสิ้นเชิง<br><br>
+            <b>ตัวอย่าง:</b> การสแกนหนังสือเรียนเพื่อดูโมเดลระบบสุริยะ 3 มิติลอยขึ้นมาบนโต๊ะเรียน`,
+            question: {
+                text: "ข้อใดคือลักษณะสำคัญของ AR ตามนิยามของ Azuma (1997)?",
+                options: ["ก. ตัดขาดจากโลกจริง 100%", "ข. ผสมผสานโลกจริงและเสมือน โต้ตอบได้แบบเรียลไทม์", "ค. ใช้แว่นตา VR เท่านั้น", "ง. ไม่จำเป็นต้องอ้างอิงตำแหน่งสามมิติ"],
+                ans: 1, exp: "Azuma ระบุองค์ประกอบ 3 อย่าง: ผสมผสานจริง+เสมือน, เรียลไทม์, ลงตำแหน่ง 3 มิติ"
+            }
+        },
+        {
+            title: "หน่วยที่ 2: ชนิดและเทคโนโลยี AR",
+            obj: "ผู้เรียนสามารถระบุชนิดของเทคโนโลยี AR และข้อจำกัดในการใช้งานได้",
+            content: `<b>ชนิดของ AR:</b><br>
+            1. <i>Marker-based:</i> ต้องใช้สัญลักษณ์รูปภาพ (QR/Marker) เพื่ออ้างอิงตำแหน่ง<br>
+            2. <i>Markerless:</i> ใช้ระนาบหรือสภาพแวดล้อมจริง (เช่น พื้น/ผนัง)<br>
+            3. <i>Location-based:</i> ใช้ GPS และเข็มทิศ (เช่น Pokemon Go)<br>
+            4. <i>Projection-based:</i> ฉายแสงลงบนพื้นผิวจริง<br><br>
+            <b>WebAR vs Native App:</b> WebAR ทำงานผ่านเบราว์เซอร์ เข้าถึงง่าย ไม่ต้องโหลดแอป แต่มีข้อจำกัดเรื่องประสิทธิภาพเมื่อเทียบกับ Native App<br>
+            <b>ข้อจำกัด:</b> แสงสว่างไม่เพียงพอ อินเทอร์เน็ตช้า และความกังวลด้านความเป็นส่วนตัวจากการเปิดกล้อง`,
+            question: {
+                text: "หากต้องการสร้างสื่อ AR ที่นักเรียนสแกนภาพในหนังสือเพื่อดูวิดีโอ ควรใช้ AR ชนิดใด?",
+                options: ["ก. Location-based", "ข. Marker-based", "ค. Projection-based", "ง. Markerless"],
+                ans: 1, exp: "Marker-based อาศัยภาพ (Marker) เป็นตัวจุดชนวนให้แสดงผล"
+            }
+        },
+        {
+            title: "หน่วยที่ 3: การออกแบบสื่อ AR เพื่อการเรียนรู้",
+            obj: "ผู้เรียนสามารถประยุกต์ใช้หลักการออกแบบสื่อเพื่อสร้างประสบการณ์ AR ที่เหมาะสมได้",
+            content: `การออกแบบต้องเริ่มจาก <b>วัตถุประสงค์การเรียนรู้</b> ไม่ใช่เริ่มที่เทคโนโลยี<br><br>
+            <b>ภาระทางปัญญา (Cognitive Load):</b> ต้องระวังไม่ให้มีสิ่งเร้ามากเกินไป ควรใช้หลักการออกแบบสื่อของ Mayer เช่น <i>Spatial Contiguity Principle</i> (คำอธิบายควรอยู่ใกล้ภาพ) เพื่อลด Extraneous Load<br><br>
+            <b>การเข้าถึง (Accessibility):</b> ต้องคำนึงถึงผู้เรียนที่อุปกรณ์ไม่รองรับ โดยเตรียมทางเลือกสำรอง (เช่น วิดีโอคลิปการทำงานของ AR)`,
+            question: {
+                text: "การจัดวางข้อความคำอธิบายให้ใกล้กับโมเดล 3 มิติใน AR สอดคล้องกับหลักการใดเพื่อลดภาระทางปัญญา?",
+                options: ["ก. Spatial Contiguity", "ข. Location-based", "ค. Virtual Reality", "ง. Markerless"],
+                ans: 0, exp: "Spatial Contiguity Principle ของ Mayer ระบุว่าข้อความและภาพที่เกี่ยวข้องกันควรอยู่ใกล้กัน"
+            }
+        },
+        {
+            title: "หน่วยที่ 4: ปฏิบัติการสร้างสื่อ WebAR",
+            obj: "ผู้เรียนสามารถสร้างสื่อ WebAR ขั้นพื้นฐานและทดสอบการใช้งานได้",
+            content: `เราจะใช้ <code>&lt;model-viewer&gt;</code> ซึ่งเป็น Web Component มาตรฐานจาก Google สำหรับแสดง 3D และ AR โดยไม่ต้องติดตั้งไลบรารีซับซ้อน<br><br>
+            <b>ขั้นตอน:</b><br>
+            1. เตรียมไฟล์ 3D นามสกุล <code>.glb</code><br>
+            2. นำไฟล์ขึ้น Host (ฝากไฟล์ไว้ใน Storage)<br>
+            3. เขียนโค้ด HTML: <code>&lt;model-viewer src="model.glb" ar ar-modes="webxr scene-viewer quick-look" camera-controls&gt;&lt;/model-viewer&gt;</code><br>
+            4. เปิดลิงก์ผ่านมือถือและกดปุ่มเปิดกล้อง<br><br>
+            <b>ทดสอบ:</b> ลองหมุนโมเดลด้านล่าง หากเปิดบนมือถือจะมีปุ่ม AR ปรากฏขึ้น<br>
+            <div style="margin-top:10px;"><model-viewer src="https://modelviewer.dev/shared-assets/models/Astronaut.glb" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" alt="A 3D model of an astronaut"></model-viewer></div>`,
+            question: {
+                text: "ไฟล์ประเภทใดที่นิยมใช้เป็นโมเดล 3 มิติสำหรับ WebAR ผ่าน model-viewer?",
+                options: ["ก. .mp4", "ข. .docx", "ค. .glb", "ง. .pdf"],
+                ans: 2, exp: ".glb เป็นฟอร์แมตมาตรฐานสำหรับ 3D บนเว็บที่มีขนาดเล็กและรองรับ AR ได้ดี"
+            }
+        },
+        {
+            title: "หน่วยที่ 5: การทดสอบและประเมินสื่อ",
+            obj: "ผู้เรียนสามารถอธิบายวิธีการประเมินประสิทธิภาพและประสิทธิผลของสื่อ AR ได้",
+            content: `การประเมินสื่อแบ่งเป็นหลายระยะ:<br>
+            1. <b>ความเที่ยงตรง:</b> ประเมินโดยผู้เชี่ยวชาญใช้ดัชนี IOC (Rovinelli & Hambleton, 1977) ข้อสอบหรือสื่อที่ผ่านเกณฑ์ต้องมีค่าเฉลี่ย ≥ 0.50<br>
+            2. <b>ประสิทธิภาพ (E1/E2):</b> E1 คือคะแนนระหว่างเรียน E2 คือคะแนนหลังเรียน เกณฑ์มาตรฐานที่นิยมคือ 80/80<br>
+            3. <b>ประสิทธิผล (Normalized Gain):</b> พัฒนาโดย Hake (1998) เพื่อดูพัฒนาการของผู้เรียน สูตรคือ (คะแนนหลังเรียน - คะแนนก่อนเรียน) / (คะแนนเต็ม - คะแนนก่อนเรียน)<br>
+            เกณฑ์ตีความ (สำหรับค่าเฉลี่ยกลุ่ม): <0.3 (ต่ำ), 0.3-0.7 (กลาง), >0.7 (สูง)`,
+            question: {
+                text: "หากนักเรียนได้คะแนนก่อนเรียน 4 เต็ม 10 และหลังเรียนได้ 7 เต็ม 10 ค่า Normalized Gain จะเท่ากับเท่าใด?",
+                options: ["ก. 0.3", "ข. 0.5", "ค. 0.7", "ง. 1.0"],
+                ans: 1, exp: "(7 - 4) / (10 - 4) = 3 / 6 = 0.5"
+            }
+        }
+    ];
+
+    // Parallel Tests
+    const testSetA = [
+        {q: "1. (บทที่ 1) ข้อใดคือคุณสมบัติหลักของ AR ตามทฤษฎีของ Azuma?", opts: ["ก. โลกเสมือนล้วน", "ข. เกิดการผสานโลกจริงและเสมือน", "ค. ไม่ต้องตอบสนองแบบเรียลไทม์", "ง. เป็นภาพ 2 มิติเท่านั้น"], ans: 1, exp: "Azuma เน้นการผสานโลกจริงและเสมือน" },
+        {q: "2. (บทที่ 1) ความจริงผสม (MR) ครอบคลุมสิ่งใดตามแนวคิดของ Milgram?", opts: ["ก. หนังสือเรียน", "ข. สเปกตรัมระหว่างโลกจริงและโลกเสมือน", "ค. ภาพยนตร์ 3 มิติ", "ง. สื่อสิ่งพิมพ์"], ans: 1, exp: "Reality-Virtuality Continuum ครอบคลุมระหว่างความจริงและความเสมือน" },
+        {q: "3. (บทที่ 2) การเล่น Pokemon Go อาศัย AR ชนิดใดเป็นหลัก?", opts: ["ก. Location-based", "ข. Marker-based", "ค. Projection-based", "ง. Markerless"], ans: 0, exp: "อาศัย GPS และตำแหน่ง" },
+        {q: "4. (บทที่ 2) ข้อใดคือข้อจำกัดของการใช้ AR ในห้องเรียน?", opts: ["ก. ดึงดูดความสนใจ", "ข. อุปกรณ์ของผู้เรียนอาจไม่รองรับ", "ค. เห็นภาพสามมิติ", "ง. เพิ่มการโต้ตอบ"], ans: 1, exp: "ความพร้อมของอุปกรณ์เป็นข้อจำกัดหลัก" },
+        {q: "5. (บทที่ 3) การออกแบบสื่อ AR ควรเริ่มต้นจากสิ่งใด?", opts: ["ก. การเลือกโปรแกรม", "ข. วัตถุประสงค์การเรียนรู้", "ค. การหาโมเดล 3D", "ง. การซื้อแว่นตา"], ans: 1, exp: "การออกแบบสื่อทุกชนิดต้องเริ่มที่วัตถุประสงค์" },
+        {q: "6. (บทที่ 3) Cognitive Load คืออะไร?", opts: ["ก. ความเร็วอินเทอร์เน็ต", "ข. ภาระทางปัญญาในการประมวลผลข้อมูล", "ค. ขนาดไฟล์โมเดล", "ง. ราคาของอุปกรณ์"], ans: 1, exp: "ภาระทางปัญญา" },
+        {q: "7. (บทที่ 4) ข้อใดคือ Tag สำหรับแสดง 3D ใน WebAR ที่แนะนำ?", opts: ["ก. <ar-box>", "ข. <video>", "ค. <model-viewer>", "ง. <canvas>"], ans: 2, exp: "<model-viewer> เป็นมาตรฐาน" },
+        {q: "8. (บทที่ 4) แอตทริบิวต์ใดที่ทำให้เปิดกล้อง AR บนมือถือได้ใน model-viewer?", opts: ["ก. autoplay", "ข. src", "ค. ar", "ง. controls"], ans: 2, exp: "แอตทริบิวต์ ar เปิดใช้งานโหมดความจริงเสริม" },
+        {q: "9. (บทที่ 5) ค่า IOC ต่ำสุดที่ยอมรับได้คือเท่าใด?", opts: ["ก. 0.00", "ข. 0.30", "ค. 0.50", "ง. 0.80"], ans: 2, exp: "Rovinelli & Hambleton กำหนดเกณฑ์ที่ 0.50 ขึ้นไป" },
+        {q: "10. (บทที่ 5) Normalized Gain วัดเรื่องอะไร?", opts: ["ก. ความสวยงาม", "ข. พัฒนาการความกู้ของผู้เรียนเทียบกับส่วนที่ยังขาด", "ค. ความเร็วแอป", "ง. ความพึงพอใจ"], ans: 1, exp: "วัดพัฒนาการ (Gain) ตามวิธีของ Hake" }
+    ];
+
+    const testSetB = [
+        {q: "1. (บทที่ 1) ลักษณะ 3 ประการของ AR ได้แก่ ผสานโลกจริงเสมือน, ลงตำแหน่ง 3 มิติ และข้อใด?", opts: ["ก. ราคาถูก", "ข. โต้ตอบแบบเรียลไทม์", "ค. ใช้แว่นตาเสมอ", "ง. ตัดขาดโลกจริง"], ans: 1, exp: "เรียลไทม์คือองค์ประกอบของ Azuma" },
+        {q: "2. (บทที่ 1) จาก Reality-Virtuality Continuum ฝั่งซ้ายสุดคืออะไร?", opts: ["ก. โลกเสมือน", "ข. ความจริงเสริม", "ค. โลกจริง", "ง. ความเสมือนเสริม"], ans: 2, exp: "ซ้ายคือ Real Environment ขวาคือ Virtual Environment" },
+        {q: "3. (บทที่ 2) AR ที่ต้องสแกน QR Code เพื่อให้โมเดลปรากฏ เรียกว่าอะไร?", opts: ["ก. Marker-based", "ข. Markerless", "ค. Location-based", "ง. Projection-based"], ans: 0, exp: "Marker-based ต้องใช้ภาพอ้างอิง" },
+        {q: "4. (บทที่ 2) WebAR มีข้อดีกว่า Native App อย่างไร?", opts: ["ก. ทำงานเร็วกว่ามาก", "ข. ไม่ต้องดาวน์โหลดและติดตั้งแอป", "ค. เข้าถึงเซนเซอร์มือถือได้ทุกตัว", "ง. ไม่ต้องใช้อินเทอร์เน็ต"], ans: 1, exp: "WebAR ใช้งานผ่านเบราว์เซอร์ได้ทันที" },
+        {q: "5. (บทที่ 3) การวางคำอธิบายภาพไว้ไกลจากภาพละเมิดหลักการใดของ Mayer?", opts: ["ก. Coherence", "ข. Spatial Contiguity", "ค. Modality", "ง. Redundancy"], ans: 1, exp: "Spatial Contiguity การจัดวางชิดกัน" },
+        {q: "6. (บทที่ 3) การเตรียมวิดีโอสำรองไว้สำหรับนักเรียนที่ไม่มีมือถือรองรับ AR เป็นการตอบโจทย์เรื่องใด?", opts: ["ก. ความสวยงาม", "ข. การเข้าถึง (Accessibility)", "ค. การลดขนาดไฟล์", "ง. การตลาด"], ans: 1, exp: "Accessibility เพื่อความเท่าเทียม" },
+        {q: "7. (บทที่ 4) ไฟล์นามสกุลใดเหมาะกับการใช้ใน <model-viewer> ที่สุด?", opts: ["ก. .obj", "ข. .fbx", "ค. .glb", "ง. .stl"], ans: 2, exp: "GLB เป็นมาตรฐาน 3D web" },
+        {q: "8. (บทที่ 4) หากต้องการให้โมเดลหมุนได้ด้วยการสัมผัส ต้องเพิ่มแอตทริบิวต์ใด?", opts: ["ก. ar", "ข. camera-controls", "ค. autoplay", "ง. shadow"], ans: 1, exp: "camera-controls อนุญาตให้โต้ตอบ" },
+        {q: "9. (บทที่ 5) ประสิทธิภาพ E1 หมายถึงอะไร?", opts: ["ก. คะแนนแบบฝึกหัดระหว่างเรียน", "ข. คะแนนทดสอบหลังเรียน", "ค. คะแนนความพึงพอใจ", "ง. ค่า IOC"], ans: 0, exp: "E1 คือประสิทธิภาพของกระบวนการ (ระหว่างเรียน)" },
+        {q: "10. (บทที่ 5) ถ้านักเรียนทำพรีเทสต์ได้ 2 เต็ม 10 โพสต์เทสต์ได้ 6 เต็ม 10 มี Gain เท่าใด?", opts: ["ก. 0.2", "ข. 0.4", "ค. 0.5", "ง. 0.8"], ans: 2, exp: "(6-2)/(10-2) = 4/8 = 0.5" }
+    ];
+
+    // ==========================================
+    // 3. UTILITIES
+    // ==========================================
+    const escapeHTML = (str) => {
+        if(!str) return '';
+        return str.replace(/[&<>'"]/g, tag => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+        }[tag]));
+    };
+
+    const showMsg = (msg, isError = false) => {
+        const el = isError ? document.getElementById('appError') : document.getElementById('appSuccess');
+        el.innerText = msg;
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 5000);
+    };
+
+    const hideAllViews = () => {
+        ['viewAuth', 'viewStudent', 'viewTeacher'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    };
+
+    const determineTestSet = (studentId) => {
+        const lastDigit = parseInt(studentId.slice(-1));
+        return (lastDigit % 2 === 0) ? { pre: testSetA, post: testSetB } : { pre: testSetB, post: testSetA };
+    };
+
+    // ==========================================
+    // 4. AUTHENTICATION & INIT
+    // ==========================================
+    const checkSession = async () => {
+        const { data: { session } } = await dbClient.auth.getSession();
+        if (session) {
+            currentUser = session.user;
+            await loadUserRole();
+        } else {
+            router('auth');
+        }
+    };
+
+    const loadUserRole = async () => {
+        try {
+            // Check teacher via RPC/View or specific table
+            const { data: teacherData, error: tErr } = await dbClient.from('teachers').select('*').eq('user_id', currentUser.id);
+            if (teacherData && teacherData.length > 0) {
+                isTeacher = true;
+                document.getElementById('userDisplay').innerText = `ผู้สอน: ${currentUser.email}`;
+                router('teacher');
+                return;
+            }
+            
+            // Check student
+            const { data: stdData, error: sErr } = await dbClient.from('students').select('*').eq('user_id', currentUser.id).single();
+            if (stdData) {
+                isTeacher = false;
+                studentData = stdData;
+                document.getElementById('userDisplay').innerText = `ผู้เรียน: ${stdData.title}${stdData.first_name} ${stdData.last_name} (${stdData.id})`;
+                await loadStudentData();
+                router('student_home');
+            } else {
+                throw new Error("ไม่พบข้อมูลสิทธิ์ผู้ใช้งาน กรุณาติดต่อผู้ดูแลระบบ");
+            }
+        } catch (e) {
+            showMsg(e.message, true);
+            dbClient.auth.signOut();
+            router('auth');
+        }
+    };
+
+    const handleAuth = async () => {
+        const email = document.getElementById('authEmail').value;
+        const pass = document.getElementById('authPassword').value;
+        const { data, error } = await dbClient.auth.signInWithPassword({ email, password: pass });
+        if (error) showMsg("อีเมลหรือรหัสผ่านไม่ถูกต้อง", true);
+        else {
+            currentUser = data.user;
+            loadUserRole();
+        }
+    };
+
+    const handleRegister = async () => {
+        const email = document.getElementById('authEmail').value;
+        const pass = document.getElementById('authPassword').value;
+        if (!email.match(/^\d{11}@/)) {
+            showMsg("นักศึกษาต้องใช้อีเมลรูปแบบ รหัสด้านศึกษา@dummy-edu.ac.th", true);
+            return;
+        }
+        const { data, error } = await dbClient.auth.signUp({ email, password: pass });
+        if (error) showMsg(error.message.includes('รหัส') ? error.message : "ลงทะเบียนล้มเหลว ตรวจสอบว่ามีรหัสในระบบหรือไม่", true);
+        else {
+            showMsg("ลงทะเบียนสำเร็จ เข้าสู่ระบบแล้ว");
+            currentUser = data.user;
+            loadUserRole();
+        }
+    };
+
+    document.getElementById('btnLogout').onclick = async () => {
+        await dbClient.auth.signOut();
+        currentUser = null; studentData = null; isTeacher = false;
+        document.getElementById('mainHeader').classList.add('hidden');
+        router('auth');
+    };
+
+    // ==========================================
+    // 5. ROUTER
+    // ==========================================
+    const router = (route) => {
+        hideAllViews();
+        const header = document.getElementById('mainHeader');
+        if (route !== 'auth') header.classList.remove('hidden');
+
+        if (route === 'auth') {
+            document.getElementById('viewAuth').classList.remove('hidden');
+        } else if (isTeacher) {
+            document.getElementById('viewTeacher').classList.remove('hidden');
+            if (route === 'teacher') loadTeacherDashboard();
+        } else {
+            document.getElementById('viewStudent').classList.remove('hidden');
+            renderStudentMenu();
+            const content = document.getElementById('studentContent');
+            
+            if (route === 'student_home' || route === 'lessons') {
+                if (!preAttempt) content.innerHTML = `<div class="card"><p>กรุณาทำแบบทดสอบก่อนเรียนก่อนเข้าสู่บทเรียน</p></div>`;
+                else renderLessons();
+            } else if (route === 'pretest') {
+                if (preAttempt) content.innerHTML = `<div class="card">คุณทำแบบทดสอบก่อนเรียนไปแล้ว ได้ ${preAttempt.score}/10 คะแนน</div>`;
+                else renderTest('pre');
+            } else if (route === 'posttest') {
+                if (userProgress.length < 5) content.innerHTML = `<div class="card"><p>ต้องเรียนครบทุกหน่วยก่อน</p></div>`;
+                else if (postAttempt) content.innerHTML = `<div class="card">คุณทำแบบทดสอบหลังเรียนไปแล้ว ได้ ${postAttempt.score}/10 คะแนน</div>`;
+                else renderTest('post');
+            } else if (route === 'summary') {
+                renderSummary();
+            } else if (route === 'materials') {
+                renderStudentMaterials();
+            } else if (route === 'profile') {
+                renderProfileForm();
+            }
+        }
+    };
+
+    // ==========================================
+    // 6. STUDENT LOGIC
+    // ==========================================
+    const loadStudentData = async () => {
+        const uid = currentUser.id;
+        const [attRes, progRes] = await Promise.all([
+            dbClient.from('attempts').select('*').eq('user_id', uid),
+            dbClient.from('progress').select('*').eq('user_id', uid)
+        ]);
+        preAttempt = attRes.data?.find(a => a.kind === 'pre');
+        postAttempt = attRes.data?.find(a => a.kind === 'post');
+        userProgress = progRes.data || [];
+    };
+
+    const renderStudentMenu = () => {
+        document.getElementById('btnPretest').className = preAttempt ? 'secondary' : '';
+        document.getElementById('btnLessons').className = preAttempt ? '' : 'secondary';
+        const canPost = userProgress.length === 5 && !postAttempt;
+        document.getElementById('btnPosttest').disabled = !canPost;
+        document.getElementById('btnPosttest').className = canPost ? '' : 'secondary';
+    };
+
+    const renderTest = (kind) => {
+        const tests = determineTestSet(studentData.id);
+        const testSet = kind === 'pre' ? tests.pre : tests.post;
+        let html = `<div class="card"><div class="card-header">แบบทดสอบ${kind === 'pre'?'ก่อน':'หลัง'}เรียน</div><form id="testForm">`;
+        
+        testSet.forEach((q, i) => {
+            html += `<div class="question-box"><p><b>${escapeHTML(q.q)}</b></p>`;
+            q.opts.forEach((opt, j) => {
+                html += `<label class="option-label"><input type="radio" name="q${i}" value="${j}" required> ${escapeHTML(opt)}</label>`;
+            });
+            html += `</div>`;
+        });
+        html += `<button type="submit">ส่งคำตอบ</button></form></div>`;
+        document.getElementById('studentContent').innerHTML = html;
+
+        document.getElementById('testForm').onsubmit = async (e) => {
+            e.preventDefault();
+            let score = 0;
+            let answers = [];
+            testSet.forEach((q, i) => {
+                const val = parseInt(document.querySelector(`input[name="q${i}"]:checked`).value);
+                answers.push(val);
+                if (val === q.ans) score++;
+            });
+            
+            const { error } = await dbClient.from('attempts').insert({ user_id: currentUser.id, kind, score, answers });
+            if (error) showMsg("ส่งคำตอบไม่สำเร็จ: " + error.message, true);
+            else {
+                showMsg("ส่งคำตอบสำเร็จ!");
+                await loadStudentData();
+                router('summary');
+            }
+        };
+    };
+
+    const renderLessons = () => {
+        let html = `<div class="card"><div class="card-header">บทเรียน (ทำแบบฝึกหัดแทรกให้ถูกต้องเพื่อผ่านหน่วย)</div><div id="unitContainer">`;
+        html += generateUnitHTML(1);
+        html += `</div></div>`;
+        document.getElementById('studentContent').innerHTML = html;
+        checkProgressUI();
+    };
+
+    const generateUnitHTML = (unitNum) => {
+        const unit = courseUnits[unitNum - 1];
+        const isDone = userProgress.some(p => p.unit === unitNum);
+        let html = `<div class="question-box" id="unitBox${unitNum}">
+            <h2>${escapeHTML(unit.title)}</h2>
+            <p><b>วัตถุประสงค์:</b> ${escapeHTML(unit.obj)}</p>
+            <div>${unit.content}</div>
+            <div style="margin-top:15px; border-top:1px solid #ccc; padding-top:10px;">
+                <p><b>คำถามตรวจสอบความเข้าใจ:</b> ${escapeHTML(unit.question.text)}</p>`;
+        
+        unit.question.options.forEach((opt, j) => {
+            html += `<label class="option-label"><input type="radio" name="u${unitNum}" value="${j}" ${isDone?'disabled':''}> ${escapeHTML(opt)}</label>`;
+        });
+        
+        if (!isDone) {
+            html += `<button onclick="checkUnitAnswer(${unitNum}, ${unit.question.ans})" style="margin-top:10px;">ตอบคำถาม</button>`;
+        } else {
+            html += `<p style="color:var(--success); margin-top:10px;">✅ ผ่านการเรียนรู้หน่วยนี้แล้ว</p>`;
+            if (unitNum < 5) html += `<button onclick="loadNextUnit(${unitNum+1})" class="secondary" style="margin-top:10px;">เรียนหน่วยถัดไป</button>`;
+        }
+        html += `<div id="uRes${unitNum}" style="margin-top:10px; font-weight:bold;"></div></div>`;
+        return html;
+    };
+
+    window.checkUnitAnswer = async (unitNum, correctAns) => {
+        const checked = document.querySelector(`input[name="u${unitNum}"]:checked`);
+        if (!checked) return alert("กรุณาเลือกคำตอบ");
+        if (parseInt(checked.value) === correctAns) {
+            document.getElementById(`uRes${unitNum}`).innerHTML = `<span style="color:var(--success)">ถูกต้อง! ${escapeHTML(courseUnits[unitNum-1].question.exp)}</span>`;
+            // Save progress
+            await dbClient.from('progress').upsert({ user_id: currentUser.id, unit: unitNum, done: true });
+            await loadStudentData();
+            renderLessons(); // Re-render to show next button
+        } else {
+            document.getElementById(`uRes${unitNum}`).innerHTML = `<span style="color:var(--danger)">ผิด ลองอีกครั้ง</span>`;
+        }
+    };
+
+    window.loadNextUnit = (unitNum) => {
+        const container = document.getElementById('unitContainer');
+        container.innerHTML += generateUnitHTML(unitNum);
+        // Scroll to new
+        document.getElementById(`unitBox${unitNum}`).scrollIntoView({behavior: "smooth"});
+    };
+
+    const checkProgressUI = () => {
+        // Render max completed unit + 1
+        let maxUnit = 0;
+        userProgress.forEach(p => { if (p.unit > maxUnit) maxUnit = p.unit; });
+        const targetUnit = maxUnit < 5 ? maxUnit + 1 : 5;
+        const container = document.getElementById('unitContainer');
+        container.innerHTML = "";
+        for (let i = 1; i <= targetUnit; i++) {
+            container.innerHTML += generateUnitHTML(i);
+        }
+    };
+
+    const renderSummary = () => {
+        let html = `<div class="card"><div class="card-header">สรุปผลการเรียน</div>`;
+        if (!preAttempt) {
+            html += `<p>คุณยังไม่ได้เริ่มเรียน</p></div>`;
+        } else {
+            html += `<p><b>คะแนนก่อนเรียน:</b> ${preAttempt.score} / 10</p>`;
+            if (postAttempt) {
+                const gain = preAttempt.score === 10 ? 0 : (postAttempt.score - preAttempt.score) / (10 - preAttempt.score);
+                html += `<p><b>คะแนนหลังเรียน:</b> ${postAttempt.score} / 10</p>`;
+                html += `<p><b>ค่าพัฒนาการสัมพัทธ์ (Normalized Gain):</b> ${gain.toFixed(2)}</p>`;
+                html += `<p style="font-size:0.9rem; color:var(--secondary);">*หมายเหตุ: เกณฑ์ตีความของ Hake (1998) ใช้ประเมินกับค่าเฉลี่ยของทั้งกลุ่มเรียนเป็นหลัก</p>`;
+                html += `<hr style="margin:15px 0;"><h3>เฉลยข้อสอบหลังเรียน</h3>`;
+                const tests = determineTestSet(studentData.id).post;
+                tests.forEach((q, i) => {
+                    const ansCls = postAttempt.answers[i] === q.ans ? 'var(--success)' : 'var(--danger)';
+                    html += `<div style="margin-bottom:10px; border-left:3px solid ${ansCls}; padding-left:10px;">
+                        <p>${escapeHTML(q.q)}</p>
+                        <p><b>ตอบ:</b> ${escapeHTML(q.opts[postAttempt.answers[i]])} <span style="color:${ansCls}">(${postAttempt.answers[i] === q.ans ? 'ถูก':'ผิด'})</span></p>
+                        <p><b>เฉลย/เหตุผล:</b> ${escapeHTML(q.exp)}</p>
+                    </div>`;
+                });
+            } else {
+                html += `<p>เรียนเนื้อหาให้จบเพื่อทำแบบทดสอบหลังเรียน</p>`;
+            }
+            html += `</div>`;
+        }
+        document.getElementById('studentContent').innerHTML = html;
+    };
+
+    const renderStudentMaterials = async () => {
+        const { data } = await dbClient.from('materials').select('*').order('created_at', { ascending: false });
+        let html = `<div class="card"><div class="card-header">สื่อการเรียนเพิ่มเติมจากผู้สอน</div>`;
+        if (data && data.length > 0) {
+            html += `<ul>`;
+            for (let m of data) {
+                let link = m.url;
+                if (m.kind === 'file') {
+                    const { data: urlData } = await dbClient.storage.from('materials').createSignedUrl(m.storage_path, 3600);
+                    link = urlData.signedUrl;
+                }
+                html += `<li style="margin-bottom:10px;"><a href="${escapeHTML(link)}" target="_blank" rel="noopener">📌 ${escapeHTML(m.title)}</a></li>`;
+            }
+            html += `</ul>`;
+        } else {
+            html += `<p>ยังไม่มีสื่อเพิ่มเติม</p>`;
+        }
+        html += `</div>`;
+        document.getElementById('studentContent').innerHTML = html;
+    };
+
+    const renderProfileForm = async () => {
+        let photoUrl = '';
+        if (studentData.photo_path) {
+            const { data } = await dbClient.storage.from('photos').createSignedUrl(studentData.photo_path, 3600);
+            photoUrl = data?.signedUrl || '';
+        }
+
+        // Fetch submission
+        const { data: subData } = await dbClient.from('submissions').select('*').eq('user_id', currentUser.id).single();
+
+        let html = `<div class="card"><div class="card-header">โปรไฟล์และการส่งงาน</div>
+            <div style="text-align:center; margin-bottom:20px;">
+                ${photoUrl ? `<img src="${photoUrl}" class="profile-pic"><br>` : ''}
+                <input type="file" id="photoInput" accept="image/jpeg, image/png">
+                <button onclick="uploadPhoto()" class="secondary" style="margin-top:5px;">อัปโหลดรูปโปรไฟล์</button>
+            </div>
+            <hr style="margin:20px 0;">
+            <h3>ส่งงานปฏิบัติ AR (หน่วยที่ 4)</h3>
+            <p>แนบลิงก์ผลงาน WebAR ของคุณ หรืออัปโหลดไฟล์วิดีโอ/ภาพหน้าจอ (ไม่เกิน 20MB)</p>
+            <form id="submissionForm" onsubmit="event.preventDefault(); submitWork();">
+                <select id="subKind" required onchange="document.getElementById('subFileInput').classList.toggle('hidden', this.value!=='file'); document.getElementById('subUrlInput').classList.toggle('hidden', this.value!=='link');">
+                    <option value="link">ส่งเป็นลิงก์ (URL)</option>
+                    <option value="file">ส่งเป็นไฟล์แนบ (PDF/PNG/JPG/MP4)</option>
+                </select>
+                <input type="url" id="subUrlInput" placeholder="https://...">
+                <input type="file" id="subFileInput" class="hidden" accept=".pdf, .png, .jpg, .jpeg, .mp4">
+                <textarea id="subNote" rows="2" placeholder="บันทึกเพิ่มเติมถึงผู้สอน"></textarea>
+                <button type="submit">ส่งงาน</button>
+            </form>
+            <div id="subStatus" style="margin-top:20px;"></div>
+        </div>`;
+        
+        document.getElementById('studentContent').innerHTML = html;
+
+        if (subData) {
+            let statHtml = `<h4>สถานะการส่งงาน:</h4>
+            <p>ชนิด: ${subData.kind}, หมายเหตุ: ${escapeHTML(subData.note)}</p>
+            <p><b>คะแนน:</b> ${subData.score !== null ? subData.score : 'รอตรวจ'}</p>
+            <p><b>ข้อเสนอแนะ:</b> ${subData.teacher_comment ? escapeHTML(subData.teacher_comment) : '-'}</p>`;
+            document.getElementById('subStatus').innerHTML = statHtml;
+        }
+    };
+
+    window.uploadPhoto = async () => {
+        const file = document.getElementById('photoInput').files[0];
+        if (!file) return alert("เลือกไฟล์ก่อน");
+        if (file.size > 2 * 1024 * 1024) return alert("ไฟล์ต้องขนาดไม่เกิน 2MB");
+        
+        // Simple client-side resize simulation (using canvas)
+        const img = new Image();
+        img.onload = async () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 400; const MAX_HEIGHT = 400;
+            let width = img.width; let height = img.height;
+            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
+            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            canvas.toBlob(async (blob) => {
+                const ext = file.name.split('.').pop();
+                const fileName = `${Date.now()}.${ext}`;
+                const path = `${currentUser.id}/${fileName}`;
+                
+                const { error: upErr } = await dbClient.storage.from('photos').upload(path, blob);
+                if (upErr) return showMsg("อัปโหลดพลาด: " + upErr.message, true);
+                
+                await dbClient.from('students').update({ photo_path: path }).eq('user_id', currentUser.id);
+                showMsg("อัปเดตรูปสำเร็จ");
+                studentData.photo_path = path;
+                renderProfileForm();
+            }, file.type);
+        };
+        img.src = URL.createObjectURL(file);
+    };
+
+    window.submitWork = async () => {
+        const kind = document.getElementById('subKind').value;
+        const note = document.getElementById('subNote').value;
+        let url = null, storage_path = null;
+
+        if (kind === 'link') {
+            url = document.getElementById('subUrlInput').value;
+            if (!url.startsWith('http')) return alert("URL ต้องขึ้นต้นด้วย http:// หรือ https://");
+        } else {
+            const file = document.getElementById('subFileInput').files[0];
+            if (!file) return alert("กรุณาเลือกไฟล์");
+            if (file.size > 20 * 1024 * 1024) return alert("ไฟล์ต้องไม่เกิน 20MB");
+            const ext = file.name.split('.').pop();
+            storage_path = `${currentUser.id}/${Date.now()}.${ext}`;
+            const { error: upErr } = await dbClient.storage.from('submissions').upload(storage_path, file);
+            if (upErr) return showMsg("อัปโหลดไฟล์ล้มเหลว: " + upErr.message, true);
+        }
+
+        const payload = { user_id: currentUser.id, unit: 4, kind, url, storage_path, note };
+        
+        // Delete old submission if exists to keep it single
+        await dbClient.from('submissions').delete().eq('user_id', currentUser.id);
+        const { error } = await dbClient.from('submissions').insert(payload);
+        
+        if (error) showMsg("ส่งงานไม่สำเร็จ: " + error.message, true);
+        else {
+            showMsg("ส่งงานสำเร็จ");
+            renderProfileForm();
+        }
+    };
+
+    // ==========================================
+    // 7. TEACHER LOGIC
+    // ==========================================
+    const loadTeacherDashboard = async () => {
+        const { data, error } = await dbClient.from('results').select('*');
+        if (error) return showMsg(error.message, true);
+
+        let html = `<div class="card"><div class="card-header">สรุปผลผู้เรียนทั้งหมด</div>
+        <button onclick="exportCSV()" style="margin-bottom:15px; background:var(--success)">ส่งออก CSV</button>
+        <div style="overflow-x:auto;"><table>
+            <tr><th>รหัส</th><th>ชื่อ-สกุล</th><th>ก่อนเรียน</th><th>หลังเรียน</th><th>Gain</th><th>ความก้าวหน้า</th></tr>`;
+        
+        window.teacherResultsData = data; // Store for CSV
+
+        data.forEach(row => {
+            const pre = row.pre_score !== null ? row.pre_score : '-';
+            const post = row.post_score !== null ? row.post_score : '-';
+            let gain = '-';
+            if (row.pre_score !== null && row.post_score !== null) {
+                gain = row.pre_score === 10 ? '0.00' : ((row.post_score - row.pre_score) / (10 - row.pre_score)).toFixed(2);
+            }
+            html += `<tr>
+                <td>${escapeHTML(row.student_id)}</td>
+                <td>${escapeHTML(row.title)}${escapeHTML(row.first_name)} ${escapeHTML(row.last_name)}</td>
+                <td>${pre}</td><td>${post}</td><td>${gain}</td>
+                <td>${row.units_completed || 0} / 5</td>
+            </tr>`;
+        });
+        html += `</table></div></div>`;
+        document.getElementById('teacherContent').innerHTML = html;
+    };
+
+    window.exportCSV = () => {
+        const data = window.teacherResultsData;
+        if (!data) return;
+        let csv = '\uFEFF'; // BOM for Thai Excel
+        csv += "รหัส,คำนำหน้า,ชื่อ,นามสกุล,อีเมล,คะแนนก่อน,คะแนนหลัง,Gain,หน่วยที่ผ่าน\n";
+        data.forEach(r => {
+            let gain = '';
+            if (r.pre_score !== null && r.post_score !== null) {
+                gain = r.pre_score === 10 ? 0 : ((r.post_score - r.pre_score) / (10 - r.pre_score)).toFixed(2);
+            }
+            csv += `"${r.student_id}","${r.title}","${r.first_name}","${r.last_name}","${r.email}","${r.pre_score||''}","${r.post_score||''}","${gain}","${r.units_completed||0}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `results_${Date.now()}.csv`;
+        link.click();
+    };
+
+    window.loadSubmissions = async () => {
+        const { data: subs } = await dbClient.from('submissions').select('*, users:user_id(email)');
+        const { data: stds } = await dbClient.from('students').select('user_id, id, first_name');
+        
+        let html = `<div class="card"><div class="card-header">ตรวจงานปฏิบัติ</div><table>
+        <tr><th>ผู้เรียน</th><th>งาน</th><th>หมายเหตุ</th><th>คะแนน/คอมเมนต์</th><th>จัดการ</th></tr>`;
+        
+        for(let s of subs) {
+            const std = stds.find(x => x.user_id === s.user_id);
+            let link = s.url;
+            if (s.kind === 'file' && s.storage_path) {
+                const { data: urlData } = await dbClient.storage.from('submissions').createSignedUrl(s.storage_path, 3600);
+                link = urlData?.signedUrl;
+            }
+            
+            html += `<tr>
+                <td>${std ? std.id : s.user_id}<br>${std ? std.first_name : ''}</td>
+                <td><a href="${escapeHTML(link)}" target="_blank" rel="noopener">ดูผลงาน</a></td>
+                <td>${escapeHTML(s.note||'-')}</td>
+                <td>
+                    <input type="number" id="sc_${s.id}" value="${s.score||''}" placeholder="คะแนน" style="width:70px; margin-bottom:5px;">
+                    <textarea id="cm_${s.id}" placeholder="ข้อเสนอแนะ" rows="2">${escapeHTML(s.teacher_comment||'')}</textarea>
+                </td>
+                <td><button onclick="gradeSubmission('${s.id}')">บันทึก</button></td>
+            </tr>`;
+        }
+        html += `</table></div>`;
+        document.getElementById('teacherContent').innerHTML = html;
+    };
+
+    window.gradeSubmission = async (id) => {
+        const score = document.getElementById(`sc_${id}`).value;
+        const comment = document.getElementById(`cm_${id}`).value;
+        const { error } = await dbClient.from('submissions').update({
+            score: score === '' ? null : parseInt(score),
+            teacher_comment: comment
+        }).eq('id', id);
+        
+        if (error) showMsg("บันทึกผิดพลาด: " + error.message, true);
+        else showMsg("บันทึกคะแนนสำเร็จ");
+    };
+
+    window.loadTeacherMaterials = async () => {
+        const { data } = await dbClient.from('materials').select('*').order('created_at', { ascending: false });
+        let html = `<div class="card"><div class="card-header">จัดการสื่อการเรียน</div>
+        <form onsubmit="event.preventDefault(); addMaterial();" style="margin-bottom:20px; background:#f8fafc; padding:15px; border-radius:6px;">
+            <input type="text" id="matTitle" required placeholder="ชื่อสื่อ">
+            <select id="matKind" onchange="document.getElementById('matFileInput').classList.toggle('hidden', this.value!=='file'); document.getElementById('matUrlInput').classList.toggle('hidden', this.value==='file');">
+                <option value="file">อัปโหลดไฟล์ (PDF/DOCX/PPTX)</option>
+                <option value="link">ลิงก์เว็บไซต์ / วิดีโอ</option>
+            </select>
+            <input type="url" id="matUrlInput" class="hidden" placeholder="https://...">
+            <input type="file" id="matFileInput" accept=".pdf, .docx, .pptx">
+            <button type="submit">เพิ่มสื่อ</button>
+        </form>
+        <ul>`;
+        
+        data.forEach(m => {
+            html += `<li style="margin-bottom:10px;">${escapeHTML(m.title)} (${m.kind}) 
+                <button class="secondary" style="padding:2px 10px; font-size:0.8rem;" onclick="delMaterial('${m.id}', '${m.storage_path}')">ลบ</button>
+            </li>`;
+        });
+        html += `</ul></div>`;
+        document.getElementById('teacherContent').innerHTML = html;
+    };
+
+    window.addMaterial = async () => {
+        const title = document.getElementById('matTitle').value;
+        const kind = document.getElementById('matKind').value;
+        let url = null, storage_path = null, file_name = null;
+
+        if (kind === 'link') {
+            url = document.getElementById('matUrlInput').value;
+            if(!url.startsWith('http')) return alert("URL ต้องขึ้นต้นด้วย http");
+        } else {
+            const file = document.getElementById('matFileInput').files[0];
+            if(!file) return alert("เลือกไฟล์");
+            if(file.size > 50 * 1024 * 1024) return alert("ไฟล์เกิน 50MB");
+            
+            const ext = file.name.split('.').pop();
+            storage_path = `materials/${Date.now()}.${ext}`;
+            file_name = file.name;
+            const { error: upErr } = await dbClient.storage.from('materials').upload(storage_path, file);
+            if (upErr) return showMsg("อัปโหลดพลาด: " + upErr.message, true);
+        }
+
+        const { error } = await dbClient.from('materials').insert({ title, kind, url, storage_path, file_name });
+        if (error) showMsg("เพิ่มสื่อพลาด: " + error.message, true);
+        else { showMsg("เพิ่มสื่อสำเร็จ"); loadTeacherMaterials(); }
+    };
+
+    window.delMaterial = async (id, path) => {
+        if(!confirm("แน่ใจหรือไม่ที่จะลบ?")) return;
